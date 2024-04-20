@@ -38,25 +38,26 @@ let createNextState stateOption state datetime =
 
 let parseArgs args =
     let now = DateTime.Now
-    let folder state arg =
-        match arg with
-        | "in" | "i" -> createNextState InOption state now
-        | "out" | "o" -> createNextState OutOption state now
-        | DateTime dt -> createNextState NoneOption state dt 
-        | _ -> 
-            printfn $"Invalid argument: {arg}"
-            state
+    let folder stateResult arg =
+        match stateResult with
+            | Ok state ->
+                match arg with
+                | "in" | "i" -> Ok (createNextState InOption state now)
+                | "out" | "o" -> Ok (createNextState OutOption state now)
+                | DateTime dt -> Ok (createNextState NoneOption state dt)
+                | _ ->  Error $"Invalid argument: {arg}"
+            | Error e -> Error e
 
-    args 
-        |> List.fold folder {
-            stateOption = NoneOption; commands = []}
-        |> stateGetCommands now
+    let init = Ok (createState NoneOption [])
+    let res = args |> Array.fold folder init
+    match res with
+        | Ok state -> Ok (stateGetCommands now state)
+        | Error e -> Error e
         
-
 [<EntryPoint>]
 let main args =
     hello "from F#"
-    let commands = parseArgs (Array.toList args)
-    printfn "%A" commands
+    let res = parseArgs args
+    printfn "%A" res
 
     0
