@@ -1,15 +1,16 @@
 ﻿open System
-open Library.Say
+open System.IO
+open Library.Recorder
 
 
 type Command =
-    | InCommand of System.DateTime
-    | OutCommand of System.DateTime
+| InCommand of System.DateTime
+| OutCommand of System.DateTime
 
 type ParseStateOption =
-    | NoneOption
-    | InOption
-    | OutOption
+| NoneOption
+| InOption
+| OutOption
 
 type ParseState =
     { 
@@ -40,13 +41,13 @@ let parseArgs args =
     let now = DateTime.Now
     let folder stateResult arg =
         match stateResult with
-            | Ok state ->
-                match arg with
-                | "in" | "i" -> Ok (createNextState InOption state now)
-                | "out" | "o" -> Ok (createNextState OutOption state now)
-                | DateTime dt -> Ok (createNextState NoneOption state dt)
-                | _ ->  Error $"Invalid argument: {arg}"
-            | Error e -> Error e
+        | Ok state ->
+            match arg with
+            | "in" | "i" -> Ok (createNextState InOption state now)
+            | "out" | "o" -> Ok (createNextState OutOption state now)
+            | DateTime dt -> Ok (createNextState NoneOption state dt)
+            | _ ->  Error $"Invalid argument: {arg}"
+        | Error e -> Error e
 
     let init = Ok (createState NoneOption [])
     let res = args |> Array.fold folder init
@@ -54,10 +55,21 @@ let parseArgs args =
         | Ok state -> Ok (stateGetCommands now state)
         | Error e -> Error e
         
+let runCommands commands =
+    use file = File.AppendText("timecard.csv")
+    let action command =
+        match command with
+        | InCommand dt -> Record file InState dt
+        | OutCommand dt -> Record file OutState dt
+    commands |> List.iter action
+    
 [<EntryPoint>]
 let main args =
-    hello "from F#"
     let res = parseArgs args
-    printfn "%A" res
-
-    0
+    match res with
+    | Ok commands ->
+        runCommands commands
+        0
+    | Error msg ->
+        printfn "%s" msg
+        1
