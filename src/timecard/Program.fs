@@ -35,11 +35,6 @@ let updateStateDateTime state dt =
         Ok(createState None commands)
     | None -> Error $"Unexpected datetime"
 
-let (|DateTime|_|) str =
-    match DateTime.TryParse(str:string) with
-    | true, dt -> Some(dt)
-    | _ -> None
-
 let parseArgs args =
     let now = DateTime.Now
     let folder stateResult arg =
@@ -63,8 +58,8 @@ let runCommands commands =
     use file = File.AppendText("timecard.csv")
     let action command =
         match command with
-        | InCommand dt -> Record file InState dt
-        | OutCommand dt -> Record file OutState dt
+        | InCommand dt -> writeRecord file (InRecord (dt))
+        | OutCommand dt -> writeRecord file (OutRecord (dt))
     commands |> List.iter action
     
 [<EntryPoint>]
