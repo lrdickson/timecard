@@ -7,52 +7,56 @@ type Command =
 | InCommand of System.DateTime
 | OutCommand of System.DateTime
 
-type ParseStateOption =
-| NoneOption
-| InOption
-| OutOption
-
 type ParseState =
     { 
-        stateOption: ParseStateOption
+        commandOption: Command option
         commands: Command list
     }
+
+let createState commandOption commands =
+    { commandOption = commandOption; commands = commands}
+
+let stateGetCommands state =
+    match state.commandOption with
+    | Some command -> state.commands @ [ command ]
+    | None -> state.commands
+
+let createNextState state commandOption =
+    createState commandOption (stateGetCommands state)
+
+let updateStateDateTime state dt =
+    match state.commandOption with
+    | Some command -> 
+        let newCommand = 
+            match command with
+            | InCommand _ -> InCommand(dt)
+            | OutCommand _ -> OutCommand(dt)
+        let commands = state.commands @ [newCommand]
+        Ok(createState None commands)
+    | None -> Error $"Unexpected datetime"
 
 let (|DateTime|_|) str =
     match DateTime.TryParse(str:string) with
     | true, dt -> Some(dt)
     | _ -> None
 
-let stateGetCommands datetime state =
-    match state with
-    | { stateOption = InOption; commands = commands } ->
-        commands @ [InCommand (datetime)]
-    | { stateOption = OutOption; commands = commands } ->
-        commands @ [OutCommand (datetime)]
-    | { stateOption = NoneOption; commands = commands } ->
-        commands
-        
-let createState stateOption commands =
-    { stateOption = stateOption; commands = commands}
-let createNextState stateOption state datetime =
-    createState stateOption (stateGetCommands datetime state)
-
 let parseArgs args =
     let now = DateTime.Now
     let folder stateResult arg =
         match stateResult with
         | Ok state ->
+            let nextState command = Ok (createNextState state (Some (command)))
             match arg with
-            | "in" | "i" -> Ok (createNextState InOption state now)
-            | "out" | "o" -> Ok (createNextState OutOption state now)
-            | DateTime dt -> Ok (createNextState NoneOption state dt)
+            | "in" | "i" -> nextState (InCommand (now))
+            | "out" | "o" -> nextState (OutCommand (now))
+            | DateTime dt -> updateStateDateTime state dt
             | _ ->  Error $"Invalid argument: {arg}"
         | Error e -> Error e
 
-    let init = Ok (createState NoneOption [])
+    let init = Ok (createState None [])
     let res = args |> Array.fold folder init
     match res with
-        | Ok state -> Ok (stateGetCommands now state)
+        | Ok state -> Ok (stateGetCommands state)
         | Error e -> Error e
         
 let runCommands commands =
