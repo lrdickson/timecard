@@ -55,12 +55,15 @@ let parseArgs args =
         | Error e -> Error e
         
 let runCommands commands =
-    use file = File.AppendText("timecard.csv")
-    let action command =
-        match command with
-        | InCommand dt -> writeRecord file (InRecord (dt))
-        | OutCommand dt -> writeRecord file (OutRecord (dt))
-    commands |> List.iter action
+    match commands with
+    | [] -> ()
+    | _ -> 
+        use file = File.AppendText("timecard.csv")
+        let action command =
+            match command with
+            | InCommand dt -> writeRecord file (InRecord (dt))
+            | OutCommand dt -> writeRecord file (OutRecord (dt))
+        commands |> List.iter action
     
 [<EntryPoint>]
 let main args =
@@ -68,6 +71,8 @@ let main args =
     match res with
     | Ok commands ->
         runCommands commands
+        use file = File.OpenText("timecard.csv")
+        summarize file
         0
     | Error msg ->
         printfn "%s" msg

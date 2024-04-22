@@ -29,18 +29,24 @@ module Recorder =
         | _ -> None
 
     let summarize file =
-        let lines = (readToEnd file).Split('\n')
+        let lines = (readToEnd file).Trim().Split('\n')
         let folder state (line:string) =
             match state with
             | Error e -> Error e
             | Ok records ->
                 let cells = line.Split(',') |> List.ofArray
                 match cells with
-                | inout::dtString::_ ->
+                | inout::dtString::_ | [inout;dtString] ->
                     match inout, dtString with
-                    | "in", DateTime dt -> Ok(InRecord(dt))
-                    | "out", DateTime dt -> Ok(OutRecord(dt))
+                    | "in", DateTime dt -> Ok(records @ [InRecord(dt)])
+                    | "out", DateTime dt -> Ok(records @ [OutRecord(dt)])
                     | _ -> Error(sprintf "Unable to parse %s" line)
-                | _ -> Error (sprintf "Not enough cells in %s" line)
+                | _ -> Error( sprintf "Not enough cells in %s" line)
+
+        let records = 
+            lines
+            |> Array.fold folder (Ok([])) 
+
+        printfn "%A" records
 
         ()
