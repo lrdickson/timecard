@@ -4,21 +4,32 @@ open System.Globalization
 open System.IO
 
 module Recorder =
+    type RecordState =
+    | In
+    | Out
+
     type Record =
-    | InRecord of DateTime
-    | OutRecord of DateTime
+        {
+            state: RecordState
+            time: DateTime
+        }
 
-    let dateTimeToString (dt:DateTime) = dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
-    let logToRow inout dt = sprintf "%s,%s" inout (dateTimeToString dt)
+    let createRecord rState dt =
+        { state = rState; time = dt }
 
-    let writeLine (file:StreamWriter) (text:string) =
-        file.WriteLine(text)
-        
-    let writeRecord file record =
-        let writeState inout dt = writeLine file (logToRow inout dt)
-        match record with
-        | InRecord dt -> writeState "in" dt
-        | OutRecord dt -> writeState "out" dt
+    let getRecordStateString record =
+        match record.state with
+        | In ->  "in"
+        | out -> "out"
+
+    let dateTimeToString (dt:DateTime) = dt.ToString(
+        "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+    let logToRow inout dt =
+        sprintf "%s,%s" inout (dateTimeToString dt)
+
+    let writeRecord (file:StreamWriter) record =
+        file.WriteLine(
+            logToRow ( getRecordStateString record ) record.time)
 
     let readToEnd (file:StreamReader) =
         file.ReadToEnd()
@@ -28,25 +39,34 @@ module Recorder =
         | true, dt -> Some(dt)
         | _ -> None
 
+    let lineFolder state (line:string) =
+        match state with
+        | Error e -> Error e
+        | Ok records ->
+            let cells = line.Split(',') |> List.ofArray
+            match cells with
+            | inout::dtString::_ | [inout;dtString] ->
+                let okRecords rState dt =
+                    Ok(records @ [createRecord rState dt])
+                match inout, dtString with
+                | "in", DateTime dt -> okRecords In dt
+                | "out", DateTime dt -> okRecords Out dt
+                | _ -> Error(sprintf "Unable to parse %s" line)
+            | _ -> Error( sprintf "Not enough cells in %s" line)
+
     let summarize file =
         let lines = (readToEnd file).Trim().Split('\n')
-        let folder state (line:string) =
-            match state with
-            | Error e -> Error e
-            | Ok records ->
-                let cells = line.Split(',') |> List.ofArray
-                match cells with
-                | inout::dtString::_ | [inout;dtString] ->
-                    match inout, dtString with
-                    | "in", DateTime dt -> Ok(records @ [InRecord(dt)])
-                    | "out", DateTime dt -> Ok(records @ [OutRecord(dt)])
-                    | _ -> Error(sprintf "Unable to parse %s" line)
-                | _ -> Error( sprintf "Not enough cells in %s" line)
 
-        let records = 
+        let recordsRes =
             lines
-            |> Array.fold folder (Ok([])) 
+            |> Array.fold lineFolder (Ok([]))
 
-        printfn "%A" records
+        match recordsRes with
+        | Ok records ->
+            let records =
+                records |> List.sortBy (fun record -> record.time)
+            printfn "%A" records
+        | Error e ->
+            printfn "%A" e
 
         ()

@@ -59,10 +59,12 @@ let runCommands commands =
     | [] -> ()
     | _ -> 
         use file = File.AppendText("timecard.csv")
+        let writeRecordFile rState dt =
+            writeRecord file (createRecord rState dt)
         let action command =
             match command with
-            | InCommand dt -> writeRecord file (InRecord (dt))
-            | OutCommand dt -> writeRecord file (OutRecord (dt))
+            | InCommand dt -> writeRecordFile In dt
+            | OutCommand dt -> writeRecordFile Out dt
         commands |> List.iter action
     
 [<EntryPoint>]
