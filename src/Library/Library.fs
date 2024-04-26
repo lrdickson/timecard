@@ -47,12 +47,66 @@ module Recorder =
             match cells with
             | inout::dtString::_ | [inout;dtString] ->
                 let okRecords rState dt =
-                    Ok(records @ [createRecord rState dt])
+                    Ok( (createRecord rState dt) :: records)
                 match inout, dtString with
                 | "in", DateTime dt -> okRecords In dt
                 | "out", DateTime dt -> okRecords Out dt
                 | _ -> Error(sprintf "Unable to parse %s" line)
             | _ -> Error( sprintf "Not enough cells in %s" line)
+
+    type DayInTime =
+        {
+            day: DateTime
+            inTime: TimeSpan
+        }
+
+    let createDayInTime day inTime =
+        {
+            day = day
+            inTime = inTime
+        }
+
+    let addHours dayInTime inTime =
+        {
+            day = dayInTime.day
+            inTime = dayInTime.inTime + inTime
+        }
+
+    type InTimeState =
+        {
+            lastRecord: Record
+            currentDay: DayInTime
+            dayInTimes: DayInTime list
+        }
+
+    let getInTime state lastTime nextTime =
+        match state with
+        | In -> nextTime - lastTime
+        | Out -> TimeSpan(0)
+
+    let getInTimeFromRecord lastRecord nextTime =
+        getInTime lastRecord.state lastRecord.time nextTime
+
+    let getInTimeFolder state (record:Record) =
+        let inTimeSinceLastRecord = getInTimeFromRecord state.lastRecord
+        let getNextState currentDay dayInTimes =
+            {
+                lastRecord = record
+                currentDay = currentDay
+                dayInTimes = dayInTimes
+            }
+        if record.time.Day = state.lastRecord.time.Day then
+            let inTime = inTimeSinceLastRecord record.time
+            let currentDay = addHours state.currentDay inTime
+            getNextState currentDay state.dayInTimes
+        else
+            // Get the remaining inTime for the previous day
+            let midnight = record.time.Date
+            let inTime = inTimeSinceLastRecord midnight
+            let previousDay = addHours state.currentDay inTime
+            let inTime = getInTime record.state midnight record.time
+            let currentDay = createDayInTime midnight inTime
+            getNextState currentDay (previousDay :: state.dayInTimes)
 
     let summarize file =
         let lines = (readToEnd file).Trim().Split('\n')
@@ -61,11 +115,28 @@ module Recorder =
             lines
             |> Array.fold lineFolder (Ok([]))
 
+
         match recordsRes with
         | Ok records ->
             let records =
-                records |> List.sortBy (fun record -> record.time)
-            printfn "%A" records
+                records
+                |> List.rev
+                |> List.sortBy (fun record -> record.time)
+            match records with
+            | firstRecord::rest ->
+                let currentDay =
+                    createDayInTime firstRecord.time.Date (TimeSpan(0))
+                let initialState = {
+                    lastRecord = firstRecord
+                    currentDay = currentDay
+                    dayInTimes = []
+                }
+                let dayInTimes =
+                    List.fold getInTimeFolder initialState rest
+                let dayInTimes = dayInTimes.dayInTimes
+                printfn "%A" dayInTimes
+            | _ ->
+                printfn "Not enough records"
         | Error e ->
             printfn "%A" e
 
