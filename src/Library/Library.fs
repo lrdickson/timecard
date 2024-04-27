@@ -96,30 +96,44 @@ module Recorder =
                 currentDay = currentDay
                 dayInTimes = dayInTimes
             }
+        let getNextDayInTimes dayInTime =
+            if dayInTime.inTime > TimeSpan(0) then
+                (dayInTime :: state.dayInTimes)
+            else
+                state.dayInTimes
+
         if record.time.Date = state.currentDay.day then
+            // Record days match
             let inTime = inTimeSinceLastRecord record.time
             let currentDay = addHours state.currentDay inTime
             getNextState currentDay state.dayInTimes
+
         else
-            // Get the remaining inTime for the previous day
-            let oneDayTs = TimeSpan(1,0,0,0)
-            let nextMidnightDt = (state.lastRecord.time + oneDayTs).Date
-            let inTime = inTimeSinceLastRecord nextMidnightDt
-            let previousDay = addHours state.currentDay inTime
-            let dayInTimes =
-                if previousDay.inTime > TimeSpan(0) then
-                    (previousDay :: state.dayInTimes)
-                else
-                    state.dayInTimes
-            let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
-            let tempRecord = createRecord state.lastRecord.state nextMidnightDt
-            let nextState =
-                { 
-                    lastRecord = tempRecord
-                    currentDay = nextDay
-                    dayInTimes = dayInTimes
-                }
-            getInTimeFolder nextState record 
+            if state.lastRecord.state = Out then
+                // A new day has started and the last record of the pervious day was an out record
+                let nextDay = createDayInTime record.time.Date (TimeSpan(0))
+                let dayInTimes = getNextDayInTimes state.currentDay
+                getNextState nextDay dayInTimes
+
+            else
+                // A new day has started and the last record of the previous day was an in record
+                // Calculate the time remaining from the previous day
+                let oneDayTs = TimeSpan(1,0,0,0)
+                let nextMidnightDt = (state.lastRecord.time + oneDayTs).Date
+                let inTime = inTimeSinceLastRecord nextMidnightDt
+                let previousDay = addHours state.currentDay inTime
+                let dayInTimes = getNextDayInTimes previousDay
+
+                // Setup a new day and a temporary record, then handle the rest with a recursive call
+                let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
+                let tempRecord = createRecord state.lastRecord.state nextMidnightDt
+                let nextState =
+                    {
+                        lastRecord = tempRecord
+                        currentDay = nextDay
+                        dayInTimes = dayInTimes
+                    }
+                getInTimeFolder nextState record
 
     let summarize file =
         let lines = (readToEnd file).Trim().Split('\n')
