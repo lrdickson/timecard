@@ -90,7 +90,7 @@ module Recorder =
     let rec getInTimeFolder state (record:Record) =
         // printfn "State: %A" state
         let inTimeSinceLastRecord = getInTimeFromRecord state.lastRecord
-        let getNextState currentDay dayInTimes =
+        let getNextState dayInTimes currentDay =
             {
                 lastRecord = record
                 currentDay = currentDay
@@ -104,25 +104,27 @@ module Recorder =
 
         if record.time.Date = state.currentDay.day then
             // Record days match
-            let inTime = inTimeSinceLastRecord record.time
-            let currentDay = addHours state.currentDay inTime
-            getNextState currentDay state.dayInTimes
+            inTimeSinceLastRecord record.time
+            |> addHours state.currentDay
+            |> getNextState state.dayInTimes
 
         else
             if state.lastRecord.state = Out then
                 // A new day has started and the last record of the pervious day was an out record
-                let nextDay = createDayInTime record.time.Date (TimeSpan(0))
-                let dayInTimes = getNextDayInTimes state.currentDay
-                getNextState nextDay dayInTimes
+                createDayInTime record.time.Date (TimeSpan(0))
+                |> (getNextDayInTimes state.currentDay
+                |> getNextState)
 
             else
                 // A new day has started and the last record of the previous day was an in record
                 // Calculate the time remaining from the previous day
                 let oneDayTs = TimeSpan(1,0,0,0)
                 let nextMidnightDt = (state.lastRecord.time + oneDayTs).Date
-                let inTime = inTimeSinceLastRecord nextMidnightDt
-                let previousDay = addHours state.currentDay inTime
-                let dayInTimes = getNextDayInTimes previousDay
+                let dayInTimes =
+                    nextMidnightDt
+                    |> inTimeSinceLastRecord
+                    |> addHours state.currentDay
+                    |> getNextDayInTimes
 
                 // Setup a new day and a temporary record, then handle the rest with a recursive call
                 let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
@@ -135,20 +137,21 @@ module Recorder =
                     }
                 getInTimeFolder nextState record
 
-    let summarize file =
-        let lines = (readToEnd file).Trim().Split('\n')
-
+    let getDayInTimes lines =
+        // Get the records
         let recordsRes =
             lines
             |> Array.fold getRecordsFolder (Ok([]))
-
         match recordsRes with
+        | Error e ->
+            Error e
         | Ok records ->
             let records =
                 records
                 |> List.rev
                 |> List.sortBy (fun record -> record.time)
-            // printfn "Records: %A" records
+
+            // Get the in times from the records
             match records with
             | firstRecord::rest ->
                 let currentDay =
@@ -158,21 +161,23 @@ module Recorder =
                     currentDay = currentDay
                     dayInTimes = []
                 }
-                // printfn "Records %A rest %A" firstRecord rest
                 let inTimesState =
                     List.fold getInTimeFolder initialState rest
 
                 // Calculate any leftover time until now
-                let outNowRecord = createRecord Out DateTime.Now
-                let inTimesState = getInTimeFolder inTimesState outNowRecord
+                let inTimesState =
+                    createRecord Out DateTime.Now
+                    |> getInTimeFolder inTimesState
 
-                // Get the in times from the state
-                let dayInTimes = inTimesState.currentDay :: inTimesState.dayInTimes
-                printfn "Day In Times: %A" dayInTimes
+                // Return the in times from the state
+                Ok (inTimesState.currentDay :: inTimesState.dayInTimes)
 
             | _ ->
-                printfn "Not enough records"
-        | Error e ->
-            printfn "%A" e
+                Error "Not enough records"
+
+    let summarize file =
+        let lines = (readToEnd file).Trim().Split('\n')
+        let dayInTimes = getDayInTimes lines
+        printfn "Day in times: %A" dayInTimes
 
         ()
