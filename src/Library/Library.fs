@@ -189,6 +189,12 @@ module Recorder =
             (jsonDictEntry "day" (dateToWeekdayString dayInTime.day))
             (jsonDictEntry "time" (dayInTime.inTime.ToString()))
 
+    let dayInTimesToJson dayInTimes =
+        dayInTimes
+        |> List.map dayInTimeToStrFolder
+        |> stringJoin ",\n"
+        |> sprintf "[\n%s\n]"
+
     let summarize file =
         let lines = (readToEnd file).Trim().Split('\n')
         let dayInTimesRes = getDayInTimes lines
@@ -196,9 +202,7 @@ module Recorder =
         | Ok dayInTimes ->
             dayInTimes
             |> List.rev
-            |> List.map dayInTimeToStrFolder
-            |> stringJoin ",\n"
-            |> sprintf "[\n%s\n]"
+            |> dayInTimesToJson
             |> printfn "%s"
         | Error e -> printfn "%A" e
 
