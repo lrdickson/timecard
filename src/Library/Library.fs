@@ -175,9 +175,31 @@ module Recorder =
             | _ ->
                 Error "Not enough records"
 
+    let stringJoin separator (list:string list) =
+        String.Join(separator, list)
+
+    let jsonDictEntry key value =
+        sprintf "\"%s\": \"%s\"" key value
+
+    let dateToWeekdayString (dt:DateTime) =
+        dt.ToString("D")
+
+    let dayInTimeToStrFolder (dayInTime:DayInTime) =
+        sprintf "{%s,\n    %s}"
+            (jsonDictEntry "day" (dateToWeekdayString dayInTime.day))
+            (jsonDictEntry "time" (dayInTime.inTime.ToString()))
+
     let summarize file =
         let lines = (readToEnd file).Trim().Split('\n')
-        let dayInTimes = getDayInTimes lines
-        printfn "Day in times: %A" dayInTimes
+        let dayInTimesRes = getDayInTimes lines
+        match dayInTimesRes with
+        | Ok dayInTimes ->
+            dayInTimes
+            |> List.rev
+            |> List.map dayInTimeToStrFolder
+            |> stringJoin ",\n"
+            |> sprintf "[\n%s\n]"
+            |> printfn "%s"
+        | Error e -> printfn "%A" e
 
         ()
