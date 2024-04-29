@@ -170,12 +170,7 @@ module Recorder =
                 List.findIndex (fun r -> r.time <= endTime)
             let endRecord = createRecord Out endTime
             let records =
-                let tempRecords =
-                    if endIndex = 0 then
-                        revRecords
-                    else
-                        snd (List.splitAt endIndex revRecords)
-                endRecord :: tempRecords
+                endRecord :: (snd (List.splitAt endIndex revRecords))
                 |> List.rev
 
             // Get the in times from the records
@@ -192,7 +187,10 @@ module Recorder =
                     List.fold getInTimeFolder initialState rest
 
                 // Return the in times from the state
-                Ok (inTimesState.currentDay :: inTimesState.dayInTimes)
+                if inTimesState.currentDay.inTime > TimeSpan(0) then
+                    Ok (inTimesState.currentDay :: inTimesState.dayInTimes)
+                else
+                    Ok (inTimesState.dayInTimes)
 
             | _ ->
                 Error "Not enough records"
