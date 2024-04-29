@@ -163,19 +163,20 @@ module Recorder =
                         {first with time = startTime} :: rest
                     | _ -> records
 
-            // Get the records that end after the end time
-            // let endIndex =
-            //     records |>
-            //     List.findIndexBack (fun r -> r.time <= endTime)
-            // let records =
-            //     if endIndex >= (records.Length - 1) then
-            //         records
-            //     else
-            //         let tempRecords = fst (List.splitAt (endIndex + 1) records)
-            //         match (List.rev tempRecords) with
-            //         | first :: rest ->
-            //             List.rev ({first with time = endTime} :: rest)
-            //         | _ -> records
+            // Get the records that end before the end time
+            let revRecords = List.rev records
+            let endIndex =
+                revRecords |>
+                List.findIndex (fun r -> r.time <= endTime)
+            let endRecord = createRecord Out endTime
+            let records =
+                let tempRecords =
+                    if endIndex = 0 then
+                        revRecords
+                    else
+                        snd (List.splitAt endIndex revRecords)
+                endRecord :: tempRecords
+                |> List.rev
 
             // Get the in times from the records
             match records with
@@ -189,11 +190,6 @@ module Recorder =
                 }
                 let inTimesState =
                     List.fold getInTimeFolder initialState rest
-
-                // Calculate any leftover time until now
-                let inTimesState =
-                    createRecord Out DateTime.Now
-                    |> getInTimeFolder inTimesState
 
                 // Return the in times from the state
                 Ok (inTimesState.currentDay :: inTimesState.dayInTimes)
@@ -236,8 +232,6 @@ module Recorder =
         | Ok dayInTimes ->
             dayInTimes
             |> List.rev
-            // |> List.filter (fun d -> d.day >= startTime)
-            |> List.filter (fun d -> d.day <= endTime)
             |> dayInTimesToJson
             |> printfn "%s"
         | Error e -> printfn "%A" e
