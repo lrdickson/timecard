@@ -135,7 +135,7 @@ module Recorder =
                     }
                 getInTimeFolder nextState record
 
-    let getDayInTimes lines =
+    let getDayInTimes lines startTime endTime =
         // Get the records
         let recordsRes =
             lines
@@ -148,6 +148,34 @@ module Recorder =
                 records
                 |> List.rev
                 |> List.sortBy (fun record -> record.time)
+
+            // Get the records that start after the start time
+            let startIndex =
+                records |>
+                List.findIndex (fun r -> r.time >= startTime)
+            let records =
+                if startIndex = 0 then
+                    records
+                else
+                    let tempRecords = snd (List.splitAt (startIndex - 1) records)
+                    match tempRecords with
+                    | first :: rest ->
+                        {first with time = startTime} :: rest
+                    | _ -> records
+
+            // Get the records that end after the end time
+            // let endIndex =
+            //     records |>
+            //     List.findIndexBack (fun r -> r.time <= endTime)
+            // let records =
+            //     if endIndex >= (records.Length - 1) then
+            //         records
+            //     else
+            //         let tempRecords = fst (List.splitAt (endIndex + 1) records)
+            //         match (List.rev tempRecords) with
+            //         | first :: rest ->
+            //             List.rev ({first with time = endTime} :: rest)
+            //         | _ -> records
 
             // Get the in times from the records
             match records with
@@ -195,7 +223,6 @@ module Recorder =
 
     let summarize file startOption endOption =
         let lines = (readToEnd file).Trim().Split('\n')
-        let dayInTimesRes = getDayInTimes lines
         let startTime =
             match startOption with
             | Some s -> s
@@ -204,11 +231,12 @@ module Recorder =
             match endOption with
             | Some s -> s
             | None -> DateTime.Now
+        let dayInTimesRes = getDayInTimes lines startTime endTime
         match dayInTimesRes with
         | Ok dayInTimes ->
             dayInTimes
             |> List.rev
-            |> List.filter (fun d -> d.day >= startTime)
+            // |> List.filter (fun d -> d.day >= startTime)
             |> List.filter (fun d -> d.day <= endTime)
             |> dayInTimesToJson
             |> printfn "%s"
