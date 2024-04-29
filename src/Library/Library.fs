@@ -67,10 +67,7 @@ module Recorder =
         }
 
     let addHours dayInTime inTime =
-        {
-            day = dayInTime.day
-            inTime = dayInTime.inTime + inTime
-        }
+        { dayInTime with inTime = dayInTime.inTime + inTime }
 
     type InTimeState =
         {
@@ -128,7 +125,8 @@ module Recorder =
 
                 // Setup a new day and a temporary record, then handle the rest with a recursive call
                 let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
-                let tempRecord = createRecord state.lastRecord.state nextMidnightDt
+                let tempRecord =
+                    {state.lastRecord with time = nextMidnightDt}
                 let nextState =
                     {
                         lastRecord = tempRecord
@@ -195,13 +193,23 @@ module Recorder =
         |> stringJoin ",\n"
         |> sprintf "[\n%s\n]"
 
-    let summarize file =
+    let summarize file startOption endOption =
         let lines = (readToEnd file).Trim().Split('\n')
         let dayInTimesRes = getDayInTimes lines
+        let startTime =
+            match startOption with
+            | Some s -> s
+            | None -> DateTime.Now - TimeSpan(14,0,0,0)
+        let endTime =
+            match endOption with
+            | Some s -> s
+            | None -> DateTime.Now
         match dayInTimesRes with
         | Ok dayInTimes ->
             dayInTimes
             |> List.rev
+            |> List.filter (fun d -> d.day >= startTime)
+            |> List.filter (fun d -> d.day <= endTime)
             |> dayInTimesToJson
             |> printfn "%s"
         | Error e -> printfn "%A" e
