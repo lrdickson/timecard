@@ -68,11 +68,6 @@ type CliOptions = {
     endTime: DateTime option
 }
 
-let checkInputRes func res =
-    match res with
-    | Error e -> Error e
-    | Ok arg -> Ok(func arg)
-
 // Note this function records the records in the reverse order of the commands list
 // Since the commands list is in the reverse order of the arguments passed,
 // this function corrects the order of the records
@@ -100,17 +95,17 @@ let writeRecords cliOptions =
 let readRecords cliOptions =
     use file = File.OpenText("timecard.csv")
     summarize file cliOptions.startTime cliOptions.endTime
-    cliOptions
 
 [<EntryPoint>]
 let main args =
     let res = 
         parseArgs args
-        |> checkInputRes getCliOptions
-        |> checkInputRes writeRecords
-        |> checkInputRes readRecords
     match res with
-    | Ok _ ->
+    | Ok commands ->
+        commands
+        |> getCliOptions
+        |> writeRecords
+        |> readRecords
         0
     | Error msg ->
         printfn "%s" msg
