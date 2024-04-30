@@ -220,7 +220,11 @@ module Recorder =
         let startTime =
             match startOption with
             | Some s -> s
-            | None -> DateTime.Now - TimeSpan(14,0,0,0)
+            | None ->
+                let daysSinceSaturday =
+                    int(DateTime.Now.DayOfWeek) - int(DayOfWeek.Saturday)
+                let daysSinceSaturday = (daysSinceSaturday + 7) % 7
+                DateTime.Now.Date - TimeSpan(daysSinceSaturday,0,0,0)
         let endTime =
             match endOption with
             | Some s -> s
@@ -233,5 +237,3 @@ module Recorder =
             |> dayInTimesToJson
             |> printfn "%s"
         | Error e -> printfn "%A" e
-
-        ()
