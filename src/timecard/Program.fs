@@ -68,10 +68,15 @@ type CliOptions = {
     endTime: DateTime option
 }
 
+let checkInputRes func res =
+    match res with
+    | Error e -> Error e
+    | Ok arg -> Ok(func arg)
+
 // Note this function records the records in the reverse order of the commands list
 // Since the commands list is in the reverse order of the arguments passed,
 // this function corrects the order of the records
-let getCliOptions commandsRes =
+let getCliOptions commands =
     let getCliOptionsFolder cliOptions command =
         let addRecord rState dt =
             { cliOptions with
@@ -82,38 +87,28 @@ let getCliOptions commandsRes =
         | OutCommand dt -> addRecord Out dt
         | StartCommand dt -> {cliOptions with startTime = Some(dt)}
         | EndCommand dt -> {cliOptions with endTime = Some(dt)}
-    match commandsRes with
-    | Error e -> Error e
-    | Ok commands ->
-        Ok( 
-        commands
-        |> List.fold getCliOptionsFolder {records = []; startTime = None; endTime = None})
+    commands
+    |> List.fold getCliOptionsFolder {records = []; startTime = None; endTime = None}
     
         
-let writeRecords cliOptionsRes =
-    match cliOptionsRes with
-    | Error msg -> Error msg
-    | Ok cliOptions ->
-        use file = File.AppendText("timecard.csv")
-        let action record = writeRecord file record
-        cliOptions.records |> List.iter action
-        Ok(cliOptions)
+let writeRecords cliOptions =
+    use file = File.AppendText("timecard.csv")
+    let action record = writeRecord file record
+    cliOptions.records |> List.iter action
+    cliOptions
 
-let readRecords cliOptionsRes =
-    match cliOptionsRes with
-    | Error msg -> Error msg
-    | Ok cliOptions ->
-        use file = File.OpenText("timecard.csv")
-        summarize file cliOptions.startTime cliOptions.endTime
-        Ok(cliOptions)
+let readRecords cliOptions =
+    use file = File.OpenText("timecard.csv")
+    summarize file cliOptions.startTime cliOptions.endTime
+    cliOptions
 
 [<EntryPoint>]
 let main args =
     let res = 
         parseArgs args
-        |> getCliOptions
-        |> writeRecords
-        |> readRecords
+        |> checkInputRes getCliOptions
+        |> checkInputRes writeRecords
+        |> checkInputRes readRecords
     match res with
     | Ok _ ->
         0
