@@ -188,9 +188,10 @@ module Recorder =
 
                 // Return the in times from the state
                 if inTimesState.currentDay.inTime > TimeSpan(0) then
-                    Ok (inTimesState.currentDay :: inTimesState.dayInTimes)
+                    inTimesState.currentDay :: inTimesState.dayInTimes
                 else
-                    Ok (inTimesState.dayInTimes)
+                    inTimesState.dayInTimes
+                |> (fun list -> Ok(List.rev list))
 
             | _ ->
                 Error "Not enough records"
@@ -199,15 +200,19 @@ module Recorder =
         String.Join(separator, list)
 
     let jsonDictEntry key value =
-        sprintf "\"%s\": \"%s\"" key value
+        sprintf """"%s": %s""" key value
+
+    let jsonDictEntryStrVal key value =
+        sprintf "\"%s\"" value
+        |> jsonDictEntry key
 
     let dateToWeekdayString (dt:DateTime) =
         dt.ToString("D")
 
     let dayInTimeToStrFolder (dayInTime:DayInTime) =
         sprintf "{%s,\n    %s}"
-            (jsonDictEntry "day" (dateToWeekdayString dayInTime.day))
-            (jsonDictEntry "time" (dayInTime.inTime.ToString()))
+            (jsonDictEntryStrVal "day" (dateToWeekdayString dayInTime.day))
+            (jsonDictEntryStrVal "time" (dayInTime.inTime.ToString()))
 
     let dayInTimesToJson dayInTimes =
         dayInTimes
@@ -216,6 +221,7 @@ module Recorder =
         |> sprintf "[\n%s\n]"
 
     let summarize file startOption endOption =
+        // Calculate the in time
         let lines = (readToEnd file).Trim().Split('\n')
         let startTime =
             match startOption with
@@ -230,10 +236,41 @@ module Recorder =
             | Some s -> s
             | None -> DateTime.Now
         let dayInTimesRes = getDayInTimes lines startTime endTime
+
+        // Display
         match dayInTimesRes with
         | Ok dayInTimes ->
-            dayInTimes
-            |> List.rev
-            |> dayInTimesToJson
-            |> printfn "%s"
+
+            let dayInTimesJson = dayInTimes |> dayInTimesToJson
+
+            // Display extra information based on whether we are using the default week option
+            match (startOption, endOption) with
+            | (None, None) ->
+                // Get the week total
+                let totalFolder sum dayInTime =
+                    sum + dayInTime.inTime
+                let weekTotal =
+                    dayInTimes
+                    |> List.fold totalFolder (TimeSpan(0))
+
+                let stuff =
+                    (DateTime.Now - DateTime(2024, 4, 20)).Days
+                    |> (fun days -> days / 7)
+                    |> (fun weeks ->
+                        if (weeks % 2) = 0 then
+                            (44, DayOfWeek.Friday)
+                        else
+                            (36, DayOfWeek.Thursday))
+
+                // Print the extended information
+                let dictPairs = [
+                    (jsonDictEntry "inTimes" dayInTimesJson)
+                    (jsonDictEntryStrVal "weekTotal" (weekTotal.ToString()))
+                ]
+                let json =
+                    sprintf "{%s}" (stringJoin ",\n" dictPairs)
+                printfn "%s" json
+            | _ ->
+                // Print just the day in times
+                printfn "%s" dayInTimesJson
         | Error e -> printfn "%A" e
