@@ -220,7 +220,7 @@ module Recorder =
         |> stringJoin ",\n"
         |> sprintf "[\n%s\n]"
 
-    let summarize file startOption endOption =
+    let summarize (now:DateTime) file startOption endOption =
         // Calculate the in time
         let lines = (readToEnd file).Trim().Split('\n')
         let startTime =
@@ -228,13 +228,13 @@ module Recorder =
             | Some s -> s
             | None ->
                 let daysSinceSaturday =
-                    int(DateTime.Now.DayOfWeek) - int(DayOfWeek.Saturday)
+                    int(now.DayOfWeek) - int(DayOfWeek.Saturday)
                 let daysSinceSaturday = (daysSinceSaturday + 7) % 7
-                DateTime.Now.Date - TimeSpan(daysSinceSaturday,0,0,0)
+                now.Date - TimeSpan(daysSinceSaturday,0,0,0)
         let endTime =
             match endOption with
             | Some s -> s
-            | None -> DateTime.Now
+            | None -> now
         let dayInTimesRes = getDayInTimes lines startTime endTime
 
         // Display
@@ -254,7 +254,7 @@ module Recorder =
                     |> List.fold totalFolder (TimeSpan(0))
 
                 let stuff =
-                    (DateTime.Now - DateTime(2024, 4, 20)).Days
+                    (now - DateTime(2024, 4, 20)).Days
                     |> (fun days -> days / 7)
                     |> (fun weeks ->
                         if (weeks % 2) = 0 then

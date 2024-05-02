@@ -41,8 +41,7 @@ let updateStateDateTime state dt =
         Ok(createState None commands)
     | None -> Error $"Unexpected datetime"
 
-let parseArgs args =
-    let now = DateTime.Now
+let parseArgs now args =
     let folder stateResult arg =
         match stateResult with
         | Ok state ->
@@ -92,20 +91,21 @@ let writeRecords cliOptions =
     cliOptions.records |> List.iter action
     cliOptions
 
-let readRecords cliOptions =
+let readRecords now cliOptions =
     use file = File.OpenText("timecard.csv")
-    summarize file cliOptions.startTime cliOptions.endTime
+    summarize now file cliOptions.startTime cliOptions.endTime
 
 [<EntryPoint>]
 let main args =
+    let now = DateTime.Now
     let res = 
-        parseArgs args
+        parseArgs now args
     match res with
     | Ok commands ->
         commands
         |> getCliOptions
         |> writeRecords
-        |> readRecords
+        |> readRecords now
         0
     | Error msg ->
         printfn "%s" msg
