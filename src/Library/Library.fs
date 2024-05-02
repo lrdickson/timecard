@@ -191,7 +191,7 @@ module Recorder =
                     inTimesState.currentDay :: inTimesState.dayInTimes
                 else
                     inTimesState.dayInTimes
-                |> (fun list -> Ok(List.rev list))
+                |> List.rev |> Ok
 
             | _ ->
                 Error "Not enough records"
