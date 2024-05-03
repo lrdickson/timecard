@@ -102,11 +102,12 @@ let main args =
         parseArgs now args
     match res with
     | Ok commands ->
-        commands
-        |> getCliOptions
-        |> writeRecords
-        |> readRecords now
-        0
-    | Error msg ->
-        printfn "%s" msg
-        1
+        let res = 
+            commands
+            |> getCliOptions
+            |> writeRecords
+            |> readRecords now
+        match res with
+        | Ok json ->  printfn "%s" json; 0
+        | Error msg -> printfn "%s" msg; 1
+    | Error msg -> printfn "%s" msg; 1

@@ -206,19 +206,79 @@ module Recorder =
         sprintf "\"%s\"" value
         |> jsonDictEntry key
 
-    let dateToWeekdayString (dt:DateTime) =
+    let dateToString (dt:DateTime) =
         dt.ToString("D")
+
+    let timeSpanToString (ts:TimeSpan) =
+        sprintf "%ihr %imin %isec"
+            ((ts.Days * 24) + ts.Hours)
+            ts.Minutes
+            ts.Seconds
 
     let dayInTimeToStrFolder (dayInTime:DayInTime) =
         sprintf "{%s,\n    %s}"
-            (jsonDictEntryStrVal "day" (dateToWeekdayString dayInTime.day))
-            (jsonDictEntryStrVal "time" (dayInTime.inTime.ToString()))
+            (jsonDictEntryStrVal "day" (dateToString dayInTime.day))
+            (jsonDictEntryStrVal "time" (timeSpanToString dayInTime.inTime))
 
     let dayInTimesToJson dayInTimes =
         dayInTimes
         |> List.map dayInTimeToStrFolder
         |> stringJoin ",\n"
         |> sprintf "[\n%s\n]"
+
+    let getExtendedInfoJson (now:DateTime) dayInTimes =
+        let dayInTimesJson = dayInTimes |> dayInTimesToJson
+        // Get the week total
+        let totalFolder sum dayInTime =
+            sum + dayInTime.inTime
+        let weekTotal =
+            dayInTimes
+            |> List.fold totalFolder (TimeSpan(0))
+        let hoursToday =
+            dayInTimes
+            |> List.tryFind (fun d -> d.day = now.Date)
+            |> function
+                | Some d -> d.inTime
+                | None -> TimeSpan(0)
+
+        let (expectedWeekHours, lastDay) =
+            (now - DateTime(2024, 4, 20)).Days
+            |> (fun days -> days / 7)
+            |> (fun weeks ->
+                if (weeks % 2) = 0 then
+                    (44, DayOfWeek.Friday)
+                else
+                    (36, DayOfWeek.Thursday))
+
+        let getExpectedDayHours (day:DateTime) =
+            match day.DayOfWeek with
+            | DayOfWeek.Saturday | DayOfWeek.Sunday -> 0
+            | DayOfWeek.Friday -> 8
+            | _ -> 9
+        let expectedDayHours = getExpectedDayHours now
+
+        let overtimeFolder sum dayInTime =
+            let { day = day; inTime = inTime } = dayInTime
+            let getWeekdayOvertime expectedDayHours =
+                let ts = TimeSpan(expectedDayHours,0,0)
+                if inTime > ts || now.Date <> day then
+                    sum + (inTime - ts)
+                else
+                    sum
+            getExpectedDayHours day
+            |> getWeekdayOvertime
+        let overtime =
+            dayInTimes
+            |> List.fold overtimeFolder (TimeSpan(0))
+
+        // Return the extended information
+        [
+            jsonDictEntry       "inTimes"   dayInTimesJson
+            jsonDictEntryStrVal "weekTotal" (timeSpanToString weekTotal)
+            jsonDictEntryStrVal "overtime"  (timeSpanToString overtime)
+        ]
+        |> stringJoin ",\n"
+        |> sprintf "{%s}"
 
     let summarize (now:DateTime) file startOption endOption =
         // Calculate the in time
@@ -241,36 +301,16 @@ module Recorder =
         match dayInTimesRes with
         | Ok dayInTimes ->
 
-            let dayInTimesJson = dayInTimes |> dayInTimesToJson
-
             // Display extra information based on whether we are using the default week option
             match (startOption, endOption) with
             | (None, None) ->
-                // Get the week total
-                let totalFolder sum dayInTime =
-                    sum + dayInTime.inTime
-                let weekTotal =
-                    dayInTimes
-                    |> List.fold totalFolder (TimeSpan(0))
-
-                let stuff =
-                    (now - DateTime(2024, 4, 20)).Days
-                    |> (fun days -> days / 7)
-                    |> (fun weeks ->
-                        if (weeks % 2) = 0 then
-                            (44, DayOfWeek.Friday)
-                        else
-                            (36, DayOfWeek.Thursday))
-
-                // Print the extended information
-                let dictPairs = [
-                    (jsonDictEntry "inTimes" dayInTimesJson)
-                    (jsonDictEntryStrVal "weekTotal" (weekTotal.ToString()))
-                ]
-                let json =
-                    sprintf "{%s}" (stringJoin ",\n" dictPairs)
-                printfn "%s" json
+                getExtendedInfoJson now dayInTimes
+                |> Ok
             | _ ->
-                // Print just the day in times
-                printfn "%s" dayInTimesJson
-        | Error e -> printfn "%A" e
+                // Return just the day in times
+                dayInTimes 
+                |> dayInTimesToJson
+                |> jsonDictEntry "inTimes"                
+                |> sprintf "{%s}"
+                |> Ok
+        | Error e -> Error e
