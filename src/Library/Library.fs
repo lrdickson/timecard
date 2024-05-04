@@ -135,66 +135,68 @@ module Recorder =
                     }
                 getInTimeFolder nextState record
 
-    let getDayInTimes lines startTime endTime =
+    let getRecords lines startTime endTime =
         // Get the records
-        let recordsRes =
-            lines
-            |> Array.fold getRecordsFolder (Ok([]))
-        match recordsRes with
-        | Error e ->
-            Error e
+        lines
+        |> Array.fold getRecordsFolder (Ok([]))
+        |> function
+        | Error e -> Error e
         | Ok records ->
-            let records =
-                records
-                |> List.rev
-                |> List.sortBy (fun record -> record.time)
+        let sortedRecords =
+            records
+            |> List.rev
+            |> List.sortBy (fun record -> record.time)
 
-            // Get the records that start after the start time
-            let startIndex =
-                records |>
-                List.findIndex (fun r -> r.time >= startTime)
-            let records =
-                if startIndex = 0 then
-                    records
-                else
-                    let tempRecords = snd (List.splitAt (startIndex - 1) records)
-                    match tempRecords with
-                    | first :: rest ->
-                        {first with time = startTime} :: rest
-                    | _ -> records
+        // Get the records that start after the start time
+        sortedRecords
+        |> List.tryFindIndex (fun r -> r.time >= startTime)
+        |> function
+        | None -> Error "All records are before the start time"
+        | Some startIndex ->
+        let records =
+            if startIndex = 0 then
+                sortedRecords
+            else
+            let tempRecords = snd (List.splitAt (startIndex - 1) sortedRecords)
+            match tempRecords with
+            | first :: rest ->
+                {first with time = startTime} :: rest
+            | _ -> sortedRecords
 
-            // Get the records that end before the end time
-            let revRecords = List.rev records
-            let endIndex =
-                revRecords |>
-                List.findIndex (fun r -> r.time <= endTime)
-            let endRecord = createRecord Out endTime
-            let records =
-                endRecord :: (snd (List.splitAt endIndex revRecords))
-                |> List.rev
+        // Get the records that end before the end time
+        let revRecords = List.rev records
+        revRecords
+        |> List.tryFindIndex (fun r -> r.time <= endTime)
+        |> function
+        | None -> Error ""
+        | Some endIndex ->
+        let endRecord = createRecord Out endTime
+        endRecord :: (snd (List.splitAt endIndex revRecords))
+        |> List.rev
+        |> Ok
 
-            // Get the in times from the records
-            match records with
-            | firstRecord::rest ->
-                let currentDay =
-                    createDayInTime firstRecord.time.Date (TimeSpan(0))
-                let initialState = {
-                    lastRecord = firstRecord
-                    currentDay = currentDay
-                    dayInTimes = []
-                }
-                let inTimesState =
-                    List.fold getInTimeFolder initialState rest
+    let getDayInTimes = function
+        // Get the in times from the records
+        | firstRecord::rest ->
+            let currentDay =
+                createDayInTime firstRecord.time.Date (TimeSpan(0))
+            let initialState = {
+                lastRecord = firstRecord
+                currentDay = currentDay
+                dayInTimes = []
+            }
+            let inTimesState =
+                List.fold getInTimeFolder initialState rest
 
-                // Return the in times from the state
-                if inTimesState.currentDay.inTime > TimeSpan(0) then
-                    inTimesState.currentDay :: inTimesState.dayInTimes
-                else
-                    inTimesState.dayInTimes
-                |> List.rev |> Ok
+            // Return the in times from the state
+            if inTimesState.currentDay.inTime > TimeSpan(0) then
+                inTimesState.currentDay :: inTimesState.dayInTimes
+            else
+                inTimesState.dayInTimes
+            |> List.rev |> Ok
 
-            | _ ->
-                Error "Not enough records"
+        | _ ->
+            Error "Not enough records"
 
     let stringJoin separator (list:string list) =
         String.Join(separator, list)
@@ -250,12 +252,15 @@ module Recorder =
                 else
                     (36, DayOfWeek.Thursday))
 
-        let getExpectedDayHours (day:DateTime) =
+        let getStandardDayHours (day:DateTime) =
             match day.DayOfWeek with
             | DayOfWeek.Saturday | DayOfWeek.Sunday -> 0
             | DayOfWeek.Friday -> 8
             | _ -> 9
-        let expectedDayHours = getExpectedDayHours now
+        let standardTimeLeft =
+            getStandardDayHours now
+            |> (fun ts -> TimeSpan(ts,0,0) - hoursToday)
+        let standardTimeEnd = now + standardTimeLeft
 
         let overtimeFolder sum dayInTime =
             let { day = day; inTime = inTime } = dayInTime
@@ -265,7 +270,7 @@ module Recorder =
                     sum + (inTime - ts)
                 else
                     sum
-            getExpectedDayHours day
+            getStandardDayHours day
             |> getWeekdayOvertime
         let overtime =
             dayInTimes
@@ -273,9 +278,11 @@ module Recorder =
 
         // Return the extended information
         [
-            jsonDictEntry       "inTimes"   dayInTimesJson
-            jsonDictEntryStrVal "weekTotal" (timeSpanToString weekTotal)
-            jsonDictEntryStrVal "overtime"  (timeSpanToString overtime)
+            jsonDictEntry       "inTimes"          dayInTimesJson
+            jsonDictEntryStrVal "weekTotal"        (timeSpanToString weekTotal)
+            jsonDictEntryStrVal "standardTimeLeft" (timeSpanToString standardTimeLeft)
+            jsonDictEntryStrVal "standardTimeEnd"  (standardTimeEnd.ToString("T"))
+            jsonDictEntryStrVal "overtime"         (timeSpanToString overtime)
         ]
         |> stringJoin ",\n"
         |> sprintf "{%s}"
@@ -295,7 +302,11 @@ module Recorder =
             match endOption with
             | Some s -> s
             | None -> now
-        let dayInTimesRes = getDayInTimes lines startTime endTime
+        let dayInTimesRes =
+            getRecords lines startTime endTime
+            |> function
+            | Error e -> Error e
+            | Ok records -> getDayInTimes records
 
         // Display
         match dayInTimesRes with
@@ -308,9 +319,9 @@ module Recorder =
                 |> Ok
             | _ ->
                 // Return just the day in times
-                dayInTimes 
+                dayInTimes
                 |> dayInTimesToJson
-                |> jsonDictEntry "inTimes"                
+                |> jsonDictEntry "inTimes"
                 |> sprintf "{%s}"
                 |> Ok
         | Error e -> Error e
