@@ -43,16 +43,16 @@ module Recorder =
         match state with
         | Error e -> Error e
         | Ok records ->
-            let cells = line.Split(',') |> List.ofArray
-            match cells with
-            | dtString::inout::_ | [dtString;inout] ->
-                let okRecords rState dt =
-                    Ok( (createRecord rState dt) :: records)
-                match inout, dtString with
-                | "in", DateTime dt -> okRecords In dt
-                | "out", DateTime dt -> okRecords Out dt
-                | _ -> Error(sprintf "Unable to parse %s" line)
-            | _ -> Error( sprintf "Not enough cells in %s" line)
+        let cells = line.Split(',') |> List.ofArray
+        match cells with
+        | dtString::inout::_ | [dtString;inout] ->
+            let okRecords rState dt =
+                Ok( (createRecord rState dt) :: records)
+            match inout, dtString with
+            | "in", DateTime dt -> okRecords In dt
+            | "out", DateTime dt -> okRecords Out dt
+            | _ -> Error(sprintf "Unable to parse %s" line)
+        | _ -> Error( sprintf "Not enough cells in %s" line)
 
     type DayInTime =
         {
@@ -106,34 +106,34 @@ module Recorder =
             |> getNextState state.dayInTimes
 
         else
-            if state.lastRecord.state = Out then
-                // A new day has started and the last record of the pervious day was an out record
-                createDayInTime record.time.Date (TimeSpan(0))
-                |> (getNextDayInTimes state.currentDay
-                |> getNextState)
+        if state.lastRecord.state = Out then
+            // A new day has started and the last record of the pervious day was an out record
+            createDayInTime record.time.Date (TimeSpan(0))
+            |> (getNextDayInTimes state.currentDay
+            |> getNextState)
 
-            else
-                // A new day has started and the last record of the previous day was an in record
-                // Calculate the time remaining from the previous day
-                let oneDayTs = TimeSpan(1,0,0,0)
-                let nextMidnightDt = (state.lastRecord.time + oneDayTs).Date
-                let dayInTimes =
-                    nextMidnightDt
-                    |> inTimeSinceLastRecord
-                    |> addHours state.currentDay
-                    |> getNextDayInTimes
+        else
+        // A new day has started and the last record of the previous day was an in record
+        // Calculate the time remaining from the previous day
+        let oneDayTs = TimeSpan(1,0,0,0)
+        let nextMidnightDt = (state.lastRecord.time + oneDayTs).Date
+        let dayInTimes =
+            nextMidnightDt
+            |> inTimeSinceLastRecord
+            |> addHours state.currentDay
+            |> getNextDayInTimes
 
-                // Setup a new day and a temporary record, then handle the rest with a recursive call
-                let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
-                let tempRecord =
-                    {state.lastRecord with time = nextMidnightDt}
-                let nextState =
-                    {
-                        lastRecord = tempRecord
-                        currentDay = nextDay
-                        dayInTimes = dayInTimes
-                    }
-                getInTimeFolder nextState record
+        // Setup a new day and a temporary record, then handle the rest with a recursive call
+        let nextDay = createDayInTime nextMidnightDt (TimeSpan(0))
+        let tempRecord =
+            {state.lastRecord with time = nextMidnightDt}
+        let nextState =
+            {
+                lastRecord = tempRecord
+                currentDay = nextDay
+                dayInTimes = dayInTimes
+            }
+        getInTimeFolder nextState record
 
     let getRecords lines startTime endTime =
         // Get the records
@@ -230,28 +230,21 @@ module Recorder =
 
     let getExtendedInfoJson (now:DateTime) dayInTimes =
         let dayInTimesJson = dayInTimes |> dayInTimesToJson
+
         // Get the week total
         let totalFolder sum dayInTime =
             sum + dayInTime.inTime
         let weekTotal =
             dayInTimes
             |> List.fold totalFolder (TimeSpan(0))
+
+        // Get standard time left today
         let hoursToday =
             dayInTimes
             |> List.tryFind (fun d -> d.day = now.Date)
             |> function
                 | Some d -> d.inTime
                 | None -> TimeSpan(0)
-
-        let (expectedWeekHours, lastDay) =
-            (now - DateTime(2024, 4, 20)).Days
-            |> (fun days -> days / 7)
-            |> (fun weeks ->
-                if (weeks % 2) = 0 then
-                    (44, DayOfWeek.Friday)
-                else
-                    (36, DayOfWeek.Thursday))
-
         let getStandardDayHours (day:DateTime) =
             match day.DayOfWeek with
             | DayOfWeek.Saturday | DayOfWeek.Sunday -> 0
@@ -262,11 +255,12 @@ module Recorder =
             |> (fun ts -> TimeSpan(ts,0,0) - hoursToday)
         let standardTimeEnd = now + standardTimeLeft
 
+        // Determine the overtime so far
         let overtimeFolder sum dayInTime =
             let { day = day; inTime = inTime } = dayInTime
             let getWeekdayOvertime expectedDayHours =
                 let ts = TimeSpan(expectedDayHours,0,0)
-                if inTime > ts || now.Date <> day then
+                if now.Date > day then
                     sum + (inTime - ts)
                 else
                     sum
@@ -276,13 +270,30 @@ module Recorder =
             dayInTimes
             |> List.fold overtimeFolder (TimeSpan(0))
 
+        // Get end time - (overtime - days remaining in workweek)
+        let endMinusOvertime =
+            (now - DateTime(2024, 4, 20)).Days
+            |> (fun days -> days / 7)
+            |> (fun weeks ->
+                if (weeks % 2) = 0 then
+                    DayOfWeek.Friday
+                else
+                    DayOfWeek.Thursday)
+            |> (fun lastDay ->
+                ((int(lastDay) - int(now.DayOfWeek) + 7) % 7) + 1)
+            |> (fun daysRemaining ->
+                overtime / float(daysRemaining))
+            |> (-) standardTimeEnd
+
         // Return the extended information
+        let timeToString (t:DateTime) = t.ToString("T")
         [
-            jsonDictEntry       "inTimes"          dayInTimesJson
-            jsonDictEntryStrVal "weekTotal"        (timeSpanToString weekTotal)
-            jsonDictEntryStrVal "standardTimeLeft" (timeSpanToString standardTimeLeft)
-            jsonDictEntryStrVal "standardTimeEnd"  (standardTimeEnd.ToString("T"))
-            jsonDictEntryStrVal "overtime"         (timeSpanToString overtime)
+            jsonDictEntry       "inTimes"           dayInTimesJson
+            jsonDictEntryStrVal "weekTotal"         (timeSpanToString weekTotal)
+            jsonDictEntryStrVal "standardTimeLeft"  (timeSpanToString standardTimeLeft)
+            jsonDictEntryStrVal "standardTimeEnd"   (timeToString standardTimeEnd)
+            jsonDictEntryStrVal "overtime"          (timeSpanToString overtime)
+            jsonDictEntryStrVal "endMinusOvertime"  (timeToString endMinusOvertime)
         ]
         |> stringJoin ",\n"
         |> sprintf "{%s}"
@@ -310,18 +321,18 @@ module Recorder =
 
         // Display
         match dayInTimesRes with
+        | Error e -> Error e
         | Ok dayInTimes ->
 
-            // Display extra information based on whether we are using the default week option
-            match (startOption, endOption) with
-            | (None, None) ->
-                getExtendedInfoJson now dayInTimes
-                |> Ok
-            | _ ->
-                // Return just the day in times
-                dayInTimes
-                |> dayInTimesToJson
-                |> jsonDictEntry "inTimes"
-                |> sprintf "{%s}"
-                |> Ok
-        | Error e -> Error e
+        // Display extra information based on whether we are using the default week option
+        match (startOption, endOption) with
+        | (None, None) ->
+            getExtendedInfoJson now dayInTimes
+            |> Ok
+        | _ ->
+            // Return just the day in times
+            dayInTimes
+            |> dayInTimesToJson
+            |> jsonDictEntry "inTimes"
+            |> sprintf "{%s}"
+            |> Ok
