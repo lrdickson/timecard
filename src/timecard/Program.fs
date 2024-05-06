@@ -30,6 +30,7 @@ let createNextState state commandOption =
 
 // Note this function records the commands in reverse order
 let updateStateDateTime state dt =
+    // eprintfn "Updating state: %A with datetime: %A" state dt
     match state.commandOption with
     | None -> Error $"Unexpected datetime"
     | Some command ->
@@ -43,6 +44,7 @@ let updateStateDateTime state dt =
     |> function
     | Error e -> Error e
     | Ok newCommand ->
+    // eprintfn "Adding new command: %A" newCommand
     newCommand :: state.commands
     |> createState None |> Ok
 
@@ -69,6 +71,7 @@ let (|FilePath|_|) str =
 
 let parseArgs now args =
     let folder stateResult arg =
+        // eprintfn "Parsing arg: %A for state: %A" arg stateResult
         match stateResult with
         | Error e -> Error e
         | Ok state ->
@@ -132,17 +135,18 @@ let main args =
     // Parse the command line arguments
     parseArgs now args
     |> function
-    | Error msg -> printfn "%s" msg; 1
+    | Error msg -> eprintfn "%s" msg; 1
     | Ok commands ->
     let cliOptions = commands |> getCliOptions
 
     // Run the commands
+    // eprintfn "CLI options: %A" cliOptions
     cliOptions |> writeRecords
     cliOptions |> readRecords now
 
     // Print the output
     |> function
-    | Error msg -> printfn "%s" msg; 1
+    | Error msg -> eprintfn "%s" msg; 1
     | Ok json ->
     printfn "%s" json
 

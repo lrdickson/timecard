@@ -85,7 +85,7 @@ module Recorder =
         getInTime lastRecord.state lastRecord.time nextTime
 
     let rec getInTimeFolder state (record:Record) =
-        // printfn "State: %A" state
+        // eprintfn "State: %A" state
         let inTimeSinceLastRecord = getInTimeFromRecord state.lastRecord
         let getNextState dayInTimes currentDay =
             {
@@ -148,6 +148,8 @@ module Recorder =
             |> List.sortBy (fun record -> record.time)
 
         // Get the records that start after the start time
+        // eprintfn "records before filter: %A" sortedRecords
+        // eprintfn "start time: %A" startTime
         sortedRecords
         |> List.tryFindIndex (fun r -> r.time >= startTime)
         |> function
@@ -303,7 +305,9 @@ module Recorder =
         let lines = (readToEnd file).Trim().Split('\n')
         let startTime =
             match startOption with
-            | Some s -> s
+            | Some s -> 
+                // eprintfn "startTime received: %A" s
+                s
             | None ->
                 let daysSinceSaturday =
                     int(now.DayOfWeek) - int(DayOfWeek.Saturday)
