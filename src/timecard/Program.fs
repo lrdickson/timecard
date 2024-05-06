@@ -4,6 +4,7 @@ open Library.Recorder
 
 
 type Command =
+| FileCommand of string
 | InCommand of System.DateTime
 | OutCommand of System.DateTime
 | StartCommand of System.DateTime
@@ -32,14 +33,39 @@ let updateStateDateTime state dt =
     match state.commandOption with
     | None -> Error $"Unexpected datetime"
     | Some command ->
-    let newCommand =
-        match command with
-        | InCommand _    -> InCommand(dt)
-        | OutCommand _   -> OutCommand(dt)
-        | StartCommand _ -> StartCommand(dt)
-        | EndCommand _   -> EndCommand(dt)
-    let commands = newCommand :: state.commands
-    Ok(createState None commands)
+    match command with
+    | InCommand _    -> InCommand(dt) |> Ok
+    | OutCommand _   -> OutCommand(dt) |> Ok
+    | StartCommand _ -> StartCommand(dt) |> Ok
+    | EndCommand _   -> EndCommand(dt) |> Ok
+    | FileCommand _ ->
+        Error "File command does not accept datetime"
+    |> function
+    | Error e -> Error e
+    | Ok newCommand ->
+    newCommand :: state.commands
+    |> createState None |> Ok
+
+// Note this function records the commands in reverse order
+let updateStateFilePath state fp =
+    match state.commandOption with
+    | None -> Error $"Unexpected filepath"
+    | Some command ->
+    match command with
+    | InCommand _ | OutCommand _ | StartCommand _
+    | EndCommand _   ->
+        Error ("Invalid comman argument: " + fp)
+    | FileCommand _ -> FileCommand(fp) |> Ok
+    |> function
+    | Error e -> Error e
+    | Ok newCommand ->
+    newCommand :: state.commands
+    |> createState None |> Ok
+
+let (|FilePath|_|) str =
+    match Uri.IsWellFormedUriString(str, UriKind.RelativeOrAbsolute) with
+    | true -> Some(str)
+    | false -> None
 
 let parseArgs now args =
     let folder stateResult arg =
@@ -53,7 +79,9 @@ let parseArgs now args =
         | "out"   | "o" -> nextState (OutCommand   (now))
         | "start" | "s" -> nextState (StartCommand (now))
         | "end"   | "e" -> nextState (EndCommand   (now))
+        | "file"  | "f" -> nextState (FileCommand  (""))
         | DateTime dt -> updateStateDateTime state dt
+        | FilePath fp -> updateStateFilePath state fp
         | _ ->  Error $"Invalid argument: {arg}"
 
     let init = Ok (createState None [])
@@ -66,6 +94,7 @@ type CliOptions = {
     records: Record list
     startTime: DateTime option
     endTime: DateTime option
+    file: string
 }
 
 // Note this function records the records in the reverse order of the commands list
@@ -82,17 +111,18 @@ let getCliOptions commands =
         | OutCommand dt -> addRecord Out dt
         | StartCommand dt -> {cliOptions with startTime = Some(dt)}
         | EndCommand dt -> {cliOptions with endTime = Some(dt)}
+        | FileCommand file -> {cliOptions with file = file}
     commands
-    |> List.fold getCliOptionsFolder {records = []; startTime = None; endTime = None}
-
+    |> List.fold getCliOptionsFolder
+        {records = []; startTime = None; endTime = None; file = "timecard.csv"}
 
 let writeRecords cliOptions =
-    use file = File.AppendText("timecard.csv")
+    use file = File.AppendText(cliOptions.file)
     let action record = writeRecord file record
     cliOptions.records |> List.iter action
 
 let readRecords now cliOptions =
-    use file = File.OpenText("timecard.csv")
+    use file = File.OpenText(cliOptions.file)
     summarize now file cliOptions.startTime cliOptions.endTime
 
 [<EntryPoint>]
