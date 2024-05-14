@@ -78,10 +78,15 @@ let parseArgs now args =
 
         let nextState command = Ok (createNextState state (Some (command)))
         match arg with
+        | "--in"    | "-i"
         | "in"    | "i" -> nextState (InCommand    (now))
+        | "--out"   | "-o"
         | "out"   | "o" -> nextState (OutCommand   (now))
+        | "--start" | "-s"
         | "start" | "s" -> nextState (StartCommand (now))
+        | "--end"   | "-e"
         | "end"   | "e" -> nextState (EndCommand   (now))
+        | "--file"  | "-f"
         | "file"  | "f" -> nextState (FileCommand  (""))
         | DateTime dt -> updateStateDateTime state dt
         | FilePath fp -> updateStateFilePath state fp
