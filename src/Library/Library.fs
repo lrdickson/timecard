@@ -252,9 +252,8 @@ module Recorder =
             | DayOfWeek.Saturday | DayOfWeek.Sunday -> 0
             | DayOfWeek.Friday -> 8
             | _ -> 9
-        let standardTimeLeft =
-            getStandardDayHours now
-            |> (fun ts -> TimeSpan(ts,0,0) - hoursToday)
+        let standardHoursToday = TimeSpan(getStandardDayHours now, 0, 0)
+        let standardTimeLeft = standardHoursToday - hoursToday
         let standardTimeEnd = now + standardTimeLeft
 
         // Determine the overtime so far
@@ -273,7 +272,7 @@ module Recorder =
             |> List.fold overtimeFolder (TimeSpan(0))
 
         // Get end time - (overtime - days remaining in workweek)
-        let endMinusOvertime =
+        let overtimeOverDaysRemaining = 
             (now - DateTime(2024, 4, 20)).Days
             |> (fun days -> days / 7)
             |> (fun weeks ->
@@ -285,7 +284,10 @@ module Recorder =
                 ((int(lastDay) - int(now.DayOfWeek) + 7) % 7) + 1)
             |> (fun daysRemaining ->
                 overtime / float(daysRemaining))
-            |> (-) standardTimeEnd
+        let endMinusOvertime = standardTimeEnd - overtimeOverDaysRemaining
+
+        // Get the planned time today
+        let plannedTimeToday = standardHoursToday - overtimeOverDaysRemaining
 
         // Return the extended information
         let timeToString (t:DateTime) = t.ToString("T")
@@ -296,6 +298,7 @@ module Recorder =
             jsonDictEntryStrVal "standardTimeEnd"   (timeToString standardTimeEnd)
             jsonDictEntryStrVal "overtime"          (timeSpanToString overtime)
             jsonDictEntryStrVal "endMinusOvertime"  (timeToString endMinusOvertime)
+            jsonDictEntryStrVal "plannedTimeToday"  (timeSpanToString plannedTimeToday)
         ]
         |> stringJoin ",\n"
         |> sprintf "{%s}"
